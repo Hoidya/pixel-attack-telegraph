@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="PixelTelegraphSpec" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://addons/pixel_telegraph/telegraph_spec.gd" id="1"]
+[ext_resource type="Script" path="res://addons/pixel_telegraph/crack_overlay.gd" id="2"]
+
+[sub_resource type="Resource" id="Resource_crack"]
+script = ExtResource("2")
+crack_seed = 3
+main_cracks = 3
+
+[resource]
+script = ExtResource("1")
+id = &"heavy_chop"
+shape = 0
+radius_px = 48
+angle_deg = 120.0
+anchor = 0
+warning_time = 1.5
+track_time = 0.0
+recovery_time = 0.45
+style = 4
+overlay = SubResource("Resource_crack")
+damage = 1
+budget_cost = 1

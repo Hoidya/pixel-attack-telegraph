@@ -1,0 +1,27 @@
+{
+  "name": "Wooden training dummy (example)",
+  "notes": "Example monster with 4 attacks. 1 tile = 16 px. Every attack deals 1 damage and can be blocked, parried or dodged.",
+  "canvas": {"width": 160, "height": 96, "scale": 3},
+  "caster": {"sprite": "wooden_dummy", "x": 44, "y": 48},
+  "cadence": {"gap_min": 1.0, "gap_max": 3.0, "tiers": {"short": [1.0, 1.4, 0.25], "mid": [1.6, 2.4, 0.5], "long": [2.5, 3.0, 0.25]},
+              "no_double_short": true, "no_same_attack_twice": true, "attack_budget": 3, "phase_start_grace": 3.0},
+  "attacks": [
+    {"id": "fast_sweep", "label": "fast sweep | fan 3 tiles 60deg | 1.0s standard fill",
+     "telegraph": {"shape": "fan", "radius": 48, "angle": 60, "duration": 1.0, "style": "standard"},
+     "recovery": 0.2, "budget_cost": 1, "damage": 1,
+     "target": {"path": [[80, 44], [80, 44], [82, 44]]}},
+    {"id": "heavy_chop", "label": "heavy chop | fan 3 tiles 120deg | 1.5s themed (cracks)",
+     "telegraph": {"shape": "fan", "radius": 48, "angle": 120, "duration": 1.5, "style": "themed", "overlay": "cracks"},
+     "recovery": 0.45, "budget_cost": 1, "damage": 1,
+     "target": {"path": [[78, 52], [80, 52], [112, 54], [112, 54], [70, 50]]}},
+    {"id": "homing_thorn", "label": "homing thorn | ray 6 tiles | 1.0s aim line, tracks 0.6s",
+     "telegraph": {"shape": "ray", "length": 96, "width": 3, "duration": 1.0, "style": "aim", "track_time": 0.6},
+     "recovery": 0.2, "budget_cost": 1, "damage": 1,
+     "projectile": {"time": 0.4, "turn_deg_per_s": 270, "note": "placeholder values"},
+     "target": {"path": [[110, 70], [112, 30], [112, 26], [112, 26]]}},
+    {"id": "square_drop", "label": "square drop | 2x2 tiles at target's feet | 1.0s countdown",
+     "telegraph": {"shape": "rect", "length": 32, "width": 32, "anchor": "target", "duration": 1.0, "style": "countdown"},
+     "recovery": 0.25, "budget_cost": 1, "damage": 1,
+     "target": {"path": [[104, 44], [104, 44], [106, 44]]}}
+  ]
+}

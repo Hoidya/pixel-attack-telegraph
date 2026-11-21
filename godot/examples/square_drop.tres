@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="PixelTelegraphSpec" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/pixel_telegraph/telegraph_spec.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"square_drop"
+shape = 3
+length_px = 32
+width_px = 32
+anchor = 1
+warning_time = 1.0
+track_time = 0.0
+recovery_time = 0.25
+style = 3
+damage = 1
+budget_cost = 1
