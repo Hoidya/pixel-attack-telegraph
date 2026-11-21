@@ -20,8 +20,9 @@ Spec format (JSON):
      "target": {"path": [[96, 40], [96, 60]]}}
   ]
 }
-telegraph keys = tools/telegraph_lib.py DEFAULTS (shape, radius, inner_radius, length, width,
-angle, direction, anchor, duration, fill_mode, style, track_time, color_role) plus
+telegraph keys = tools/telegraph_lib.py DEFAULTS (shape including custom, radius, inner_radius,
+length, width, angle, direction, anchor, duration, fill_mode, style, track_time, color_role,
+category, tile_mask, custom_polygon, custom_union) plus
 "overlay": "cracks" for the themed style.
 "projectile": {"time": 0.4, "turn_deg_per_s": 270} makes an aim-line attack fire a homing
 projectile after the warning (damage then comes from the projectile, not the line).

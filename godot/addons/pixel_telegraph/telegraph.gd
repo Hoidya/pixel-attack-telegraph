@@ -22,6 +22,9 @@ signal finished
 const BAYER: PackedInt32Array = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
 enum { C_EDGE, C_MAIN, C_HI, C_FLASH, C_WHITE }
 enum { K_INTERIOR, K_BORDER, K_INNER_BORDER }
+## Default palettes for Category.MIXED / SUPPORT (color_role AUTO). Blue (CONTROL) is reserved and opt-in.
+const PALETTE_MIXED: Array = [Color("1a0828"), Color("8e3ac5"), Color("c084e8"), Color("e8d2f6"), Color.WHITE]
+const PALETTE_SUPPORT: Array = [Color("082418"), Color("2a9d6e"), Color("7dceb0"), Color("d2f0e4"), Color.WHITE]
 
 var spec: PixelTelegraphSpec
 ## Optional nodes. If target is set, tracking reads target.global_position + target_offset.
@@ -189,7 +192,7 @@ func _begin(p_spec: PixelTelegraphSpec, cp: Vector2, tp: Vector2) -> void:
 	spec = p_spec
 	if spec.style == PixelTelegraphSpec.Style.AIM_LINE and spec.shape != PixelTelegraphSpec.Shape.RAY and spec.shape != PixelTelegraphSpec.Shape.RECT:
 		push_warning("PixelTelegraph: AIM_LINE style needs RAY or RECT shape; drawing as STANDARD.")
-	_cols = palette(spec.color_role, spec.custom_colors)
+	_cols = spec.resolved_palette()
 	_dur_f = spec.warning_frames()
 	_track_f = spec.track_frames()
 	_caster_px = Vector2i(floori(cp.x), floori(cp.y))
@@ -242,7 +245,7 @@ func _aim(tp: Vector2) -> float:
 	if spec.use_fixed_direction:
 		return deg_to_rad(spec.fixed_direction_deg)
 	var s := spec.shape
-	if spec.anchor == PixelTelegraphSpec.Anchor.TARGET and (s == PixelTelegraphSpec.Shape.CIRCLE or s == PixelTelegraphSpec.Shape.RING or s == PixelTelegraphSpec.Shape.RECT):
+	if spec.anchor == PixelTelegraphSpec.Anchor.TARGET and (s == PixelTelegraphSpec.Shape.CIRCLE or s == PixelTelegraphSpec.Shape.RING or s == PixelTelegraphSpec.Shape.RECT or s == PixelTelegraphSpec.Shape.CUSTOM):
 		return 0.0
 	return atan2(tp.y - _caster_px.y, tp.x - _caster_px.x)
 
@@ -291,6 +294,8 @@ static func compute_shape(p_spec: PixelTelegraphSpec, origin: Vector2i, ang: flo
 		else:
 			center = Vector2(bx, by)
 		geo = {"kind": s, "base": Vector2(bx, by), "r": r, "ri": ri}
+	elif s == PixelTelegraphSpec.Shape.CUSTOM:
+		return _compute_custom(p_spec, origin, ang)
 	else:
 		var L := p_spec.length_px
 		var Wd := p_spec.width_px
@@ -334,6 +339,152 @@ static func compute_shape(p_spec: PixelTelegraphSpec, origin: Vector2i, ang: flo
 
 static func _wrap(a: float) -> float:
 	return fposmod(a + PI, TAU) - PI
+
+
+static func _cardinal_cs(ang: float) -> Vector2:
+	var d := fposmod(rad_to_deg(ang), 360.0)
+	if d < 1e-6 or d > 360.0 - 1e-6:
+		return Vector2(1, 0)
+	if absf(d - 90.0) < 1e-6:
+		return Vector2(0, 1)
+	if absf(d - 180.0) < 1e-6:
+		return Vector2(-1, 0)
+	if absf(d - 270.0) < 1e-6:
+		return Vector2(0, -1)
+	return Vector2(cos(ang), sin(ang))
+
+
+static func _on_segment(px: float, py: float, ax: float, ay: float, bx: float, by: float, eps: float = 1e-6) -> bool:
+	var cross := (px - ax) * (by - ay) - (py - ay) * (bx - ax)
+	if absf(cross) > 1e-6:
+		return false
+	var dot := (px - ax) * (bx - ax) + (py - ay) * (by - ay)
+	if dot < -eps:
+		return false
+	var length2 := (bx - ax) * (bx - ax) + (by - ay) * (by - ay)
+	return dot - length2 <= eps
+
+
+static func point_in_polygon(px: float, py: float, verts: PackedVector2Array) -> bool:
+	var n := verts.size()
+	if n < 3:
+		return false
+	var j := n - 1
+	var inside := false
+	for i in n:
+		var xi := verts[i].x
+		var yi := verts[i].y
+		var xj := verts[j].x
+		var yj := verts[j].y
+		if _on_segment(px, py, xi, yi, xj, yj):
+			return true
+		if (yi > py) != (yj > py):
+			var xint := (xj - xi) * (py - yi) / (yj - yi) + xi
+			if px < xint:
+				inside = not inside
+		j = i
+	return inside
+
+
+## Returns { tiles: Array[Vector2i], anchor: Vector2 }.
+static func parse_tile_mask(mask: PackedStringArray, tile_size: int, tile_anchor: Vector2) -> Dictionary:
+	var tiles: Array[Vector2i] = []
+	var marked := Vector2(INF, INF)
+	var w := 0
+	var h := mask.size()
+	for y in h:
+		var row := str(mask[y])
+		w = maxi(w, row.length())
+		for x in row.length():
+			var ch := row[x]
+			if ch == "." or ch == " ":
+				continue
+			tiles.append(Vector2i(x, y))
+			if (ch == "@" or ch == "o" or ch == "O") and marked.x == INF:
+				marked = Vector2(x + 0.5, y + 0.5)
+	var anchor: Vector2
+	if marked.x != INF:
+		anchor = marked
+	elif tile_anchor != Vector2(-1, -1):
+		anchor = tile_anchor
+	else:
+		anchor = Vector2(w / 2.0, h / 2.0)
+	return {"tiles": tiles, "anchor": anchor, "tile_size": tile_size}
+
+
+static func _spec_from_union_part(part: Dictionary) -> PixelTelegraphSpec:
+	return PixelTelegraphSpec.from_dict(part, {})
+
+
+static func _compute_custom(p_spec: PixelTelegraphSpec, origin: Vector2i, ang: float) -> Dictionary:
+	var cs := _cardinal_cs(ang)
+	var ca := cs.x
+	var sa := cs.y
+	var ox := origin.x
+	var oy := origin.y
+	var cells := {}
+	var ts := maxi(1, p_spec.tile_size)
+	var parsed := parse_tile_mask(p_spec.tile_mask, ts, p_spec.tile_anchor)
+	var tiles: Array = parsed.tiles
+	var anchor: Vector2 = parsed.anchor
+	var rects: Array = []  # [x0, y0, x1, y1]
+	for t in tiles:
+		var tx: int = t.x
+		var ty: int = t.y
+		rects.append([
+			tx * ts - anchor.x * ts, ty * ts - anchor.y * ts,
+			(tx + 1) * ts - anchor.x * ts, (ty + 1) * ts - anchor.y * ts
+		])
+	var poly: PackedVector2Array = p_spec.custom_polygon
+	var xs: Array[float] = []
+	var ys: Array[float] = []
+	for r in rects:
+		for pt in [Vector2(r[0], r[1]), Vector2(r[2], r[1]), Vector2(r[2], r[3]), Vector2(r[0], r[3])]:
+			xs.append(ox + pt.x * ca - pt.y * sa)
+			ys.append(oy + pt.x * sa + pt.y * ca)
+	for v in poly:
+		xs.append(ox + v.x * ca - v.y * sa)
+		ys.append(oy + v.x * sa + v.y * ca)
+	if xs.size() > 0:
+		var minx := int(floor(xs.min())) - 2
+		var maxx := int(ceil(xs.max())) + 2
+		var miny := int(floor(ys.min())) - 2
+		var maxy := int(ceil(ys.max())) + 2
+		for y in range(miny, maxy + 1):
+			for x in range(minx, maxx + 1):
+				var dx := (x + 0.5) - (ox + 0.5)
+				var dy := (y + 0.5) - (oy + 0.5)
+				var lx := dx * ca + dy * sa
+				var ly := -dx * sa + dy * ca
+				var hit := false
+				for r in rects:
+					if r[0] <= lx + 1e-9 and lx < r[2] and r[1] <= ly + 1e-9 and ly < r[3]:
+						hit = true
+						break
+				if not hit and poly.size() >= 3 and point_in_polygon(lx, ly, poly):
+					hit = true
+				if hit:
+					cells[Vector2i(x, y)] = true
+	for part in p_spec.custom_union:
+		if typeof(part) != TYPE_DICTIONARY:
+			continue
+		var sub := _spec_from_union_part(part)
+		var off := Vector2.ZERO
+		if part.get("offset") != null:
+			var o: Variant = part.offset
+			if typeof(o) == TYPE_VECTOR2:
+				off = o
+			else:
+				off = Vector2(float(o[0]), float(o[1]))
+		var ox2 := ox + off.x * ca - off.y * sa
+		var oy2 := oy + off.x * sa + off.y * ca
+		var part_ang := ang + deg_to_rad(float(part.get("direction", 0)))
+		var sub_shp := compute_shape(sub, Vector2i(roundi(ox2), roundi(oy2)), part_ang)
+		for c in sub_shp.cells:
+			cells[c] = true
+	var center := Vector2(ox + 0.5, oy + 0.5)
+	var geo := {"kind": PixelTelegraphSpec.Shape.CUSTOM, "base": center}
+	return {"cells": cells, "center": center, "geo": geo}
 
 
 static func _border_of(cells: Dictionary) -> Dictionary:

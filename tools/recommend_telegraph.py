@@ -7,8 +7,12 @@
 Input JSON: {"attacks": [{"id": "bite", "kind": "melee", "windup": 0.8,
                           "reach_tiles": 2, "width_deg": 60, "weight": "light"}, ...]}
 kind: melee | heavy_melee | projectile | dash | ground_drop | self_aoe | ring | line
+      | custom | cross | plus | l_shape
 Optional per attack: windup (s), reach_tiles, width_deg, size_tiles, homing (bool),
-weight (light|heavy), tile_px (default 16).
+weight (light|heavy), tile_px (default 16), category (damage|control|mixed|support),
+tile_mask (list of strings), tile_anchor, custom_polygon, custom_union, anchor, style.
+The 5 shapes (fan, circle, ring, rect, ray) are only defaults; pass a tile_mask,
+polygon, or custom_union (or kind custom/cross/plus/l_shape) for a custom shape.
 The output uses the same keys as tools/render_preview.py, so you can preview it directly.
 These are DEFAULTS to discuss with the designer, not final values.
 """
@@ -22,7 +26,16 @@ RULES = """decision table
 - donut / safe-inside                -> ring + countdown
 - heavy melee (windup >= 1.2 s)      -> fan + themed (standard fill + monster overlay), wide & slow
 - normal melee                       -> fan + standard fill, narrow & fast
-- long line / beam                   -> rect + standard fill from caster"""
+- long line / beam                   -> rect + standard fill from caster
+- tile_mask / polygon / custom_union / kind custom|cross|plus|l_shape
+                                     -> custom shape (same data drives warning and hitbox)
+
+Ask the designer (the 5 built-in shapes are only defaults):
+- Use a default shape, or define a custom one (tile mask, polygon, or union of defaults)?
+- Category per attack: DAMAGE, CONTROL (knockback/slow/stun/root/pull), MIXED, or optional SUPPORT?
+- Colours are customisable. Defaults: red = damage, blue = control (reserved, unused unless
+  you opt in; the wooden-dummy example is red only), mixed = purple (or red fill + blue edge).
+  Override per category or per skill if you want, but keep it consistent and readable."""
 
 
 def recommend(a, tile=16):
@@ -31,7 +44,34 @@ def recommend(a, tile=16):
     reach = float(a.get('reach_tiles', 3))
     why = []
     t = dict(duration=round(w, 2))
-    if kind in ('projectile', 'dash'):
+    # custom shape: tile mask, polygon, union of default shapes, or a named kind
+    custom_keys = a.get('tile_mask') or a.get('custom_polygon') or a.get('polygon') or a.get('custom_union')
+    if kind in ('custom', 'cross', 'plus', 'l_shape') or custom_keys:
+        t.update(shape='custom', style=a.get('style', 'countdown' if a.get('anchor') == 'target' else 'standard'))
+        if a.get('anchor'):
+            t['anchor'] = a['anchor']
+        if a.get('tile_mask'):
+            t['tile_mask'] = a['tile_mask']
+            t['tile_size'] = int(a.get('tile_size', tile))
+            if a.get('tile_anchor') is not None:
+                t['tile_anchor'] = a['tile_anchor']
+        elif kind in ('cross', 'plus'):
+            t['tile_mask'] = ['.#.', '###', '.@.']
+            t['tile_size'] = tile
+            why.append('plus/cross as a custom tile mask (origin = @ cell)')
+        elif kind == 'l_shape':
+            t['tile_mask'] = ['#.', '#.', '##']
+            t['tile_size'] = tile
+            why.append('L-shape as a custom tile mask (origin = mask centre)')
+        if a.get('custom_polygon') or a.get('polygon'):
+            t['custom_polygon'] = a.get('custom_polygon') or a.get('polygon')
+        if a.get('custom_union'):
+            t['custom_union'] = a['custom_union']
+        if not t.get('tile_mask') and not t.get('custom_polygon') and not t.get('custom_union'):
+            why.append('custom shape requested — ask the designer for a tile mask, a polygon, or a union of default shapes')
+        else:
+            why.append('custom shape: the same data draws the warning and is the hitbox')
+    elif kind in ('projectile', 'dash'):
         t.update(shape='ray', length=int(reach * tile) if 'reach_tiles' in a else 96, width=3, style='aim')
         if a.get('homing') or a.get('aimed', True):
             t['track_time'] = round(w * 0.6, 2)
@@ -67,8 +107,10 @@ def recommend(a, tile=16):
     if t.get('anchor') == 'target' and w < 0.8:
         why.append('WARNING: target-anchored drops usually need >= 0.8 s to walk out')
     rec = a.get('recovery', 0.45 if t.get('style') == 'themed' else 0.2)
+    cat = a.get('category', 'damage')
+    t['category'] = cat
     return dict(id=a.get('id', kind), telegraph=t, recovery=rec, budget_cost=a.get('budget_cost', 1),
-                damage=a.get('damage', 1)), why
+                damage=a.get('damage', 1), category=cat), why
 
 
 def main():

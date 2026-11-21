@@ -1,9 +1,11 @@
 {
   "attacks": [
-    {"id": "bite", "kind": "melee", "windup": 0.8, "reach_tiles": 2},
-    {"id": "slam", "kind": "heavy_melee", "windup": 1.5, "reach_tiles": 3},
-    {"id": "spit", "kind": "projectile", "windup": 1.0, "reach_tiles": 6, "homing": true},
-    {"id": "meteor", "kind": "ground_drop", "windup": 1.0, "size_tiles": 2},
-    {"id": "jab", "kind": "melee", "windup": 0.3, "reach_tiles": 2}
+    {"id": "bite", "kind": "melee", "windup": 0.8, "reach_tiles": 2, "category": "damage"},
+    {"id": "slam", "kind": "heavy_melee", "windup": 1.5, "reach_tiles": 3, "category": "damage"},
+    {"id": "spit", "kind": "projectile", "windup": 1.0, "reach_tiles": 6, "homing": true, "category": "damage"},
+    {"id": "meteor", "kind": "ground_drop", "windup": 1.0, "size_tiles": 2, "category": "damage"},
+    {"id": "jab", "kind": "melee", "windup": 0.3, "reach_tiles": 2, "category": "damage"},
+    {"id": "cross_slam", "kind": "cross", "windup": 1.0, "category": "damage"},
+    {"id": "root_zone", "kind": "custom", "windup": 1.0, "tile_mask": ["##", "##"], "anchor": "target", "category": "control"}
   ]
 }

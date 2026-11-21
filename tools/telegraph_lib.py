@@ -3,7 +3,7 @@
 
 Core ideas:
   * One params dict drives BOTH the drawn warning and the damage hitbox: both come from Telegraph.cells (a pixel set).
-  * shape: fan / circle / ring / rect / ray (a thin rect).
+  * shape: fan / circle / ring / rect / ray (defaults) or custom (tile mask, polygon, and/or union of default shapes).
   * style: standard fill / quick flash / aim line / countdown (fill from shape centre) / themed (standard + overlay).
   * Pixel rules: integer pixels, opaque colours only; fades use 4x4 Bayer ordered dither, never alpha gradients or blur.
 
@@ -31,8 +31,32 @@ ROLE_COLORS = {
     'control': dict(edge_dark=hx('0a1830'), main=hx('3a7bd5'), hi=hx('8ab8f0'), flash=hx('d6e8ff'), white=hx('ffffff')),
 }
 
+# Palettes: damage = default red; control = reserved blue (opt-in, unused by the wooden-dummy example);
+# mixed = purple; support = teal. color_role 'auto' (default) follows category; explicit
+# damage/control/custom overrides it.
+PALETTES = {
+    'damage':  ROLE_COLORS['damage'],
+    'control': ROLE_COLORS['control'],
+    'mixed':   dict(edge_dark=hx('1a0828'), main=hx('8e3ac5'), hi=hx('c084e8'), flash=hx('e8d2f6'), white=hx('ffffff')),
+    'support': dict(edge_dark=hx('082418'), main=hx('2a9d6e'), hi=hx('7dceb0'), flash=hx('d2f0e4'), white=hx('ffffff')),
+}
+
+def resolved_colors(p):
+    """Pick a palette: custom_colors / explicit color_role win; otherwise category."""
+    role = p.get('color_role') or 'auto'
+    custom = p.get('custom_colors')
+    if role == 'custom' and custom and len(custom) >= 5:
+        def _c(v):
+            return hx(v) if isinstance(v, str) else tuple(v)
+        keys = ('edge_dark', 'main', 'hi', 'flash', 'white')
+        return dict(zip(keys, (_c(v) for v in custom[:5])))
+    if role in ('damage', 'control'):
+        return PALETTES[role]
+    cat = p.get('category') or 'damage'
+    return PALETTES.get(cat, PALETTES['damage'])
+
 DEFAULTS = dict(
-    shape='fan',          # fan | circle | ring | rect | ray
+    shape='fan',          # fan | circle | ring | rect | ray | custom
     radius=48,            # fan / circle / ring outer radius (px)
     inner_radius=0,       # ring inner radius (px)
     length=64,            # rect / ray length (px)
@@ -44,7 +68,14 @@ DEFAULTS = dict(
     fill_mode=None,       # outward_from_caster | outward_from_shape_center | none ; None = style default
     style='standard',     # standard | quick | aim | countdown | themed
     track_time=0.0,       # >0: facing follows the target for track_time s, then locks
-    color_role='damage',  # damage | control
+    color_role='auto',    # auto (follow category) | damage | control | custom
+    category='damage',    # damage | control | mixed | support  (picks the default palette)
+    custom_colors=None,   # optional 5 colours when color_role=custom: edge, main, hi, flash, white
+    tile_mask=None,       # custom: list of strings, '#' filled, '.' empty, '@'/'o' filled origin cell
+    tile_size=16,         # custom tile mask: pixels per tile
+    tile_anchor=None,     # custom: origin in tile units from mask top-left; None + no '@' = mask centre
+    custom_polygon=None,  # custom: list of [x,y] px relative to the origin, rotated by facing
+    custom_union=None,    # custom: list of default-shape dicts, unioned (optional offset, direction)
     overlay=None,         # themed overlay object with draw(canvas, tel, prog, frame)
 )
 STYLE_FILL = dict(standard='outward_from_caster', themed='outward_from_caster',
@@ -58,9 +89,140 @@ def frames_of(sec, fps=FPS):
 def _wrap(a):
     return (a + math.pi) % (2 * math.pi) - math.pi
 
+def _on_segment(px, py, ax, ay, bx, by, eps=1e-6):
+    """True if (px,py) lies on the segment a-b (inclusive)."""
+    cross = (px - ax) * (by - ay) - (py - ay) * (bx - ax)
+    if abs(cross) > 1e-6:
+        return False
+    dot = (px - ax) * (bx - ax) + (py - ay) * (by - ay)
+    if dot < -eps:
+        return False
+    length2 = (bx - ax) ** 2 + (by - ay) ** 2
+    return dot - length2 <= eps
+
+def point_in_polygon(px, py, verts):
+    """Pixel-centre test: inside or on the boundary of a polygon (vertices [x,y] or (x,y))."""
+    n = len(verts)
+    if n < 3:
+        return False
+    j = n - 1
+    inside = False
+    for i in range(n):
+        xi, yi = verts[i][0], verts[i][1]
+        xj, yj = verts[j][0], verts[j][1]
+        if _on_segment(px, py, xi, yi, xj, yj):
+            return True
+        if (yi > py) != (yj > py):
+            xint = (xj - xi) * (py - yi) / (yj - yi) + xi
+            if px < xint:
+                inside = not inside
+        j = i
+    return inside
+
+def parse_tile_mask(mask, tile_size=16, tile_anchor=None):
+    """Return (tiles, anchor) where tiles is a list of (tx, ty) occupied cells and
+    anchor is (ax, ay) in tile units from the top-left corner of the mask.
+    '#' = filled, '.' or space = empty, '@' or 'o'/'O' = filled origin (cell centre).
+    If no '@' is present, tile_anchor is used; if that is also None, the mask centre."""
+    rows = list(mask or [])
+    h = len(rows)
+    w = max((len(r) for r in rows), default=0)
+    tiles = []
+    marked = None
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch in ' .':
+                continue
+            tiles.append((x, y))
+            if ch in '@oO' and marked is None:
+                marked = (x + 0.5, y + 0.5)
+    if marked is not None:
+        anchor = marked
+    elif tile_anchor is not None:
+        ax, ay = (tile_anchor[0], tile_anchor[1]) if not isinstance(tile_anchor, (int, float)) else (tile_anchor, tile_anchor)
+        anchor = (float(ax), float(ay))
+    else:
+        anchor = (w / 2.0, h / 2.0)
+    return tiles, anchor, tile_size
+
+def _cardinal_cs(ang):
+    """Exact cos/sin for 0/90/180/270 (and 360==0) so tile masks stay stable."""
+    d = math.fmod(math.degrees(ang), 360.0)
+    if d < 0:
+        d += 360.0
+    if d < 1e-6 or d > 360.0 - 1e-6:
+        return 1.0, 0.0
+    if abs(d - 90.0) < 1e-6:
+        return 0.0, 1.0
+    if abs(d - 180.0) < 1e-6:
+        return -1.0, 0.0
+    if abs(d - 270.0) < 1e-6:
+        return 0.0, -1.0
+    return math.cos(ang), math.sin(ang)
+
+def _in_half_open(lx, ly, x0, y0, x1, y1, eps=1e-9):
+    return x0 <= lx + eps and lx < x1 and y0 <= ly + eps and ly < y1
+
+def _custom_cells(p, origin, ang):
+    """Custom shape: union of a tile mask, a polygon, and/or default shapes. Same pixel set
+    is used for drawing and the hitbox. Countdown fill uses the origin (anchor) as centre."""
+    ox, oy = origin
+    ca, sa = _cardinal_cs(ang)
+    cells = set()
+    ts = int(p.get('tile_size') or 16)
+    tiles, anchor, _ = parse_tile_mask(p.get('tile_mask') or [], ts, p.get('tile_anchor'))
+    rects = []
+    for tx, ty in tiles:
+        rects.append((tx * ts - anchor[0] * ts, ty * ts - anchor[1] * ts,
+                      (tx + 1) * ts - anchor[0] * ts, (ty + 1) * ts - anchor[1] * ts))
+    poly = p.get('custom_polygon') or p.get('polygon') or []
+    xs, ys = [], []
+    for x0, y0, x1, y1 in rects:
+        for lx, ly in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)):
+            xs.append(ox + lx * ca - ly * sa)
+            ys.append(oy + lx * sa + ly * ca)
+    for v in poly:
+        lx, ly = v[0], v[1]
+        xs.append(ox + lx * ca - ly * sa)
+        ys.append(oy + lx * sa + ly * ca)
+    if xs:
+        minx, maxx = int(math.floor(min(xs))) - 2, int(math.ceil(max(xs))) + 2
+        miny, maxy = int(math.floor(min(ys))) - 2, int(math.ceil(max(ys))) + 2
+        for y in range(miny, maxy + 1):
+            for x in range(minx, maxx + 1):
+                dx = (x + 0.5) - (ox + 0.5)
+                dy = (y + 0.5) - (oy + 0.5)
+                lx = dx * ca + dy * sa
+                ly = -dx * sa + dy * ca
+                hit = False
+                for x0, y0, x1, y1 in rects:
+                    if _in_half_open(lx, ly, x0, y0, x1, y1):
+                        hit = True
+                        break
+                if not hit and poly and point_in_polygon(lx, ly, poly):
+                    hit = True
+                if hit:
+                    cells.add((x, y))
+    for part in (p.get('custom_union') or []):
+        sub = dict(DEFAULTS)
+        # do not inherit the parent custom fields
+        for k in ('tile_mask', 'custom_polygon', 'polygon', 'custom_union', 'tile_anchor'):
+            sub[k] = None
+        sub.update({k: v for k, v in part.items() if k not in ('offset',)})
+        off = part.get('offset') or (0, 0)
+        ox2 = ox + off[0] * ca - off[1] * sa
+        oy2 = oy + off[0] * sa + off[1] * ca
+        part_ang = ang + math.radians(float(part.get('direction', 0) or 0))
+        sub_cells, _, _ = shape_cells(sub, (int(round(ox2)), int(round(oy2))), part_ang)
+        cells |= sub_cells
+    center = (ox + 0.5, oy + 0.5)
+    return cells, center, dict(kind='custom', base=center)
+
 def shape_cells(p, origin, ang):
     """Return (cells, center, geo). cells: set of pixel coords; ang: facing (rad).
     Pixels are tested at their centre (x+.5, y+.5), so shapes are deterministic on the pixel grid."""
+    if p.get('shape') == 'custom':
+        return _custom_cells(p, origin, ang)
     ox, oy = origin
     shape = p['shape']
     cells = set()
@@ -116,7 +278,7 @@ class Telegraph:
         p = dict(DEFAULTS); p.update(params)
         if p['fill_mode'] is None: p['fill_mode'] = STYLE_FILL[p['style']]
         self.p = p
-        self.col = ROLE_COLORS[p['color_role']]
+        self.col = resolved_colors(p)
         self.dur_f = frames_of(p['duration'])
         self.track_f = frames_of(p['track_time'])
         self.caster = caster
@@ -131,7 +293,7 @@ class Telegraph:
     def _aim(self, caster, target):
         if self.p['direction'] is not None:
             return math.radians(self.p['direction'])
-        if target is None or self.p['anchor'] == 'target' and self.p['shape'] in ('circle', 'ring', 'rect'):
+        if target is None or self.p['anchor'] == 'target' and self.p['shape'] in ('circle', 'ring', 'rect', 'custom'):
             return 0.0
         return math.atan2(target[1] - caster[1], target[0] - caster[0])
 

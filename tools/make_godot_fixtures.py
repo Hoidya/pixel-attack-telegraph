@@ -18,15 +18,31 @@ CASES = [
     dict(name='rect_33x15_target_45', shape='rect', length=33, width=15, anchor='target', origin=(50, 50), deg=45),
     dict(name='ray_96x3_17deg', shape='ray', length=96, width=3, origin=(10, 70), deg=17),
     dict(name='ray_96x3_200deg', shape='ray', length=96, width=3, origin=(120, 40), deg=200),
+    dict(name='custom_2x2_mask', shape='custom', tile_mask=['##', '##'], origin=(90, 64), deg=0),
+    dict(name='custom_plus_mask', shape='custom', tile_mask=['.#.', '#@#', '.#.'], origin=(50, 50), deg=0),
+    dict(name='custom_l_mask', shape='custom', tile_mask=['#.', '#.', '##'], origin=(20, 20), deg=0),
+    dict(name='custom_diamond_poly', shape='custom', custom_polygon=[[0, -20], [20, 0], [0, 20], [-20, 0]], origin=(60, 60), deg=0),
+    dict(name='custom_union_cross', shape='custom', custom_union=[
+        dict(shape='rect', length=48, width=16, anchor='target'),
+        dict(shape='rect', length=48, width=16, anchor='target', direction=90),
+    ], origin=(50, 50), deg=0),
+    dict(name='custom_2x2_mask_30deg', shape='custom', tile_mask=['##', '##'], origin=(80, 40), deg=30),
 ]
 
 out = []
 for c in CASES:
     p = dict(DEFAULTS); p.update({k: v for k, v in c.items() if k not in ('name', 'origin', 'deg')})
     cells, _, _ = shape_cells(p, c['origin'], math.radians(c['deg']))
-    out.append(dict(name=c['name'], shape=p['shape'], radius=p['radius'], inner_radius=p['inner_radius'],
-                    angle=p['angle'], length=p['length'], width=p['width'], anchor=p['anchor'],
-                    origin=list(c['origin']), deg=c['deg'], cells=sorted([list(x) for x in cells])))
+    rec = dict(name=c['name'], shape=p['shape'], radius=p['radius'], inner_radius=p['inner_radius'],
+               angle=p['angle'], length=p['length'], width=p['width'], anchor=p['anchor'],
+               origin=list(c['origin']), deg=c['deg'], cells=sorted([list(x) for x in cells]))
+    if p['shape'] == 'custom':
+        rec['tile_mask'] = p.get('tile_mask') or []
+        rec['tile_size'] = p.get('tile_size', 16)
+        rec['tile_anchor'] = list(p['tile_anchor']) if p.get('tile_anchor') is not None else None
+        rec['custom_polygon'] = p.get('custom_polygon') or []
+        rec['custom_union'] = p.get('custom_union') or []
+    out.append(rec)
 dst = os.path.join(HERE, '..', 'godot', 'tests', 'fixtures', 'python_masks.json')
 with open(dst, 'w') as f:
     json.dump(out, f, separators=(',', ':'))

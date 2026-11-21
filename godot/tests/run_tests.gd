@@ -16,6 +16,8 @@ func _initialize() -> void:
 	test_budget()
 	test_cadence()
 	test_json_matches_tres()
+	test_category_palette()
+	test_custom_shapes()
 	print("RESULT: %d checks, %d failures" % [_checks, _fails])
 	quit(1 if _fails > 0 else 0)
 
@@ -29,13 +31,27 @@ func check(cond: bool, msg: String) -> void:
 
 func _spec_from_fixture(c: Dictionary) -> PixelTelegraphSpec:
 	var s := S.new()
-	s.shape = {"fan": S.Shape.FAN, "circle": S.Shape.CIRCLE, "ring": S.Shape.RING, "rect": S.Shape.RECT, "ray": S.Shape.RAY}[c.shape]
+	s.shape = {"fan": S.Shape.FAN, "circle": S.Shape.CIRCLE, "ring": S.Shape.RING, "rect": S.Shape.RECT, "ray": S.Shape.RAY, "custom": S.Shape.CUSTOM}[c.shape]
 	s.radius_px = int(c.radius)
 	s.inner_radius_px = int(c.inner_radius)
 	s.angle_deg = float(c.angle)
 	s.length_px = int(c.length)
 	s.width_px = int(c.width)
 	s.anchor = S.Anchor.TARGET if c.anchor == "target" else S.Anchor.CASTER
+	if c.get("tile_mask") != null:
+		s.tile_mask = PackedStringArray()
+		for row in c.tile_mask:
+			s.tile_mask.append(str(row))
+	if c.get("tile_size") != null:
+		s.tile_size = int(c.tile_size)
+	if c.get("tile_anchor") != null:
+		s.tile_anchor = Vector2(float(c.tile_anchor[0]), float(c.tile_anchor[1]))
+	if c.get("custom_polygon") != null:
+		s.custom_polygon = PackedVector2Array()
+		for v in c.custom_polygon:
+			s.custom_polygon.append(Vector2(float(v[0]), float(v[1])))
+	if c.get("custom_union") != null:
+		s.custom_union = c.custom_union
 	return s
 
 
@@ -92,6 +108,37 @@ func _cases() -> Array:
 	out.append(load("res://examples/heavy_chop.tres"))
 	out.append(load("res://examples/homing_thorn.tres"))
 	out.append(load("res://examples/square_drop.tres"))
+	# custom shapes (the 5 built-ins are defaults; these are user-defined)
+	var mask2x2 := S.new()
+	mask2x2.shape = S.Shape.CUSTOM
+	mask2x2.style = S.Style.COUNTDOWN
+	mask2x2.anchor = S.Anchor.TARGET
+	mask2x2.tile_mask = PackedStringArray(["##", "##"])
+	mask2x2.warning_time = 0.5
+	out.append(mask2x2)
+	var plus := S.new()
+	plus.shape = S.Shape.CUSTOM
+	plus.style = S.Style.STANDARD
+	plus.tile_mask = PackedStringArray([".#.", "###", ".@."])
+	plus.warning_time = 0.5
+	out.append(plus)
+	var poly := S.new()
+	poly.shape = S.Shape.CUSTOM
+	poly.style = S.Style.QUICK_FLASH
+	poly.custom_polygon = PackedVector2Array([Vector2(-12, -8), Vector2(20, -8), Vector2(20, 12), Vector2(-12, 12)])
+	poly.warning_time = 0.4
+	out.append(poly)
+	var cross := S.new()
+	cross.shape = S.Shape.CUSTOM
+	cross.style = S.Style.THEMED
+	cross.overlay = PixelTelegraphCrackOverlay.new()
+	cross.anchor = S.Anchor.TARGET
+	cross.custom_union = [
+		{"shape": "rect", "length": 48, "width": 16, "anchor": "target"},
+		{"shape": "rect", "length": 48, "width": 16, "anchor": "target", "direction": 90},
+	]
+	cross.warning_time = 0.5
+	out.append(cross)
 	return out
 
 
@@ -238,3 +285,60 @@ func test_json_matches_tres() -> void:
 		var ca := PixelTelegraph.compute_shape(a, Vector2i(40, 40), 0.3)
 		var cb := PixelTelegraph.compute_shape(b, Vector2i(40, 40), 0.3)
 		check(ca.cells.size() == cb.cells.size(), "%s same mask size" % id)
+
+
+## Category picks the default palette; color_role / custom_colors still override it.
+## Blue is a reserved control colour, unused unless opted into.
+func test_category_palette() -> void:
+	var s := S.new()
+	s.color_role = S.ColorRole.AUTO
+	s.category = S.Category.DAMAGE
+	var red: Array = PixelTelegraph.palette(S.ColorRole.DAMAGE)
+	var blue: Array = PixelTelegraph.palette(S.ColorRole.CONTROL)
+	check(s.resolved_palette()[1] == red[1], "AUTO + DAMAGE category -> red")
+	s.category = S.Category.CONTROL
+	check(s.resolved_palette()[1] == blue[1], "AUTO + CONTROL category -> reserved blue")
+	s.category = S.Category.MIXED
+	check(s.resolved_palette()[1] == PixelTelegraph.PALETTE_MIXED[1], "AUTO + MIXED -> purple")
+	s.category = S.Category.SUPPORT
+	check(s.resolved_palette()[1] == PixelTelegraph.PALETTE_SUPPORT[1], "AUTO + SUPPORT -> teal")
+	s.category = S.Category.CONTROL
+	s.color_role = S.ColorRole.DAMAGE
+	check(s.resolved_palette()[1] == red[1], "explicit DAMAGE colour overrides CONTROL category")
+	s.color_role = S.ColorRole.CUSTOM
+	s.custom_colors = PackedColorArray([Color.BLACK, Color("00ff00"), Color.WHITE, Color.WHITE, Color.WHITE])
+	check(s.resolved_palette()[1] == Color("00ff00"), "custom_colors override category")
+	var loaded := PixelTelegraphSpec.from_dict({"shape": "fan", "category": "mixed"}, {"id": "x"})
+	check(loaded.category == S.Category.MIXED and loaded.color_role == S.ColorRole.AUTO, "JSON category + default AUTO color_role")
+	check(loaded.resolved_palette()[1] == PixelTelegraph.PALETTE_MIXED[1], "JSON mixed category -> purple")
+	print("category palette: ok")
+
+
+## Custom tile mask / polygon / union: warning pixels == hitbox, 2x2 mask == 32x32 rect at 0 deg.
+func test_custom_shapes() -> void:
+	var mask := S.new()
+	mask.shape = S.Shape.CUSTOM
+	mask.tile_mask = PackedStringArray(["##", "##"])
+	var rect := S.new()
+	rect.shape = S.Shape.RECT
+	rect.length_px = 32
+	rect.width_px = 32
+	rect.anchor = S.Anchor.TARGET
+	var a := PixelTelegraph.compute_shape(mask, Vector2i(90, 64), 0.0)
+	var b := PixelTelegraph.compute_shape(rect, Vector2i(90, 64), 0.0)
+	check(a.cells.size() == 32 * 32, "2x2 mask is 32x32 px, got %d" % a.cells.size())
+	var mismatch := 0
+	for p in a.cells:
+		if not b.cells.has(p):
+			mismatch += 1
+	for p in b.cells:
+		if not a.cells.has(p):
+			mismatch += 1
+	check(mismatch == 0, "2x2 tile mask == 32x32 target rect at 0 deg (%d mismatches)" % mismatch)
+	var plus := S.new()
+	plus.shape = S.Shape.CUSTOM
+	plus.tile_mask = PackedStringArray([".#.", "#@#", ".#."])
+	var pc := PixelTelegraph.compute_shape(plus, Vector2i(50, 50), 0.0)
+	check(pc.cells.size() == 5 * 16 * 16, "plus mask is 5 tiles, got %d" % pc.cells.size())
+	check(pc.cells.has(Vector2i(50, 50)) and not pc.cells.has(Vector2i(50 - 16, 50 - 16)), "plus arms, empty corners")
+	print("custom shapes: ok")

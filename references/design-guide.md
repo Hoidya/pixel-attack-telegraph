@@ -24,7 +24,14 @@ Condensed from a survey of how action games warn players (sources at the end).
 - Last 20 %: outline flashes 3 times. Hit frame: the whole area flashes for 1 frame, then the attack VFX takes over.
 - Aim line: 1 px dashed line while tracking, 3 px bright line once locked, a dot runs from caster to tip; fire when it arrives.
 - Countdown (drops at the player's feet): fills from the shape's own centre.
-- Colours are *roles*: red = damage (default); add others (e.g. blue = control) only with a legend.
+- Colours are *roles* that follow the attack category: red = damage (default); blue = control
+  (knockback, slow, stun, root, pull) — this is a reserved interface colour, optional and
+  unused by default (the wooden-dummy example only uses red); purple = mixed (damage + control),
+  or red fill + blue edge; teal = support. Override per category or per skill if you want, but
+  keep the mapping consistent in one game and always pair it with a dark + light outline.
+- The 5 built-in shapes are a shared starter set, not a closed list. Crosses, L-shapes,
+  multi-tile patterns and hand-drawn areas are custom shapes (tile mask, polygon, or a union
+  of defaults). The warning must still equal the hitbox.
 - Theme belongs in overlays (cracks, roots), never in the shared language, so every monster stays readable.
 
 ## Readability checklist

@@ -6,8 +6,10 @@
 
 Give it to your coding agent (Codex, Claude Code, Cursor, ...) in any game project. The agent will
 read your enemies' attacks, **recommend** a warning shape / style / timing for each one, **ask you**
-to customize the numbers, then implement them with the bundled Godot system - where the drawn
-warning and the hitbox come from the same data, so players only get hit where they were warned.
+to customize the numbers (including a custom shape if the 5 defaults are not enough, and a
+DAMAGE / CONTROL / MIXED category with customisable colours), then implement them with the bundled
+Godot system - where the drawn warning and the hitbox come from the same data, so players only get
+hit where they were warned.
 
 ![Gallery: 5 shapes x 5 styles](examples/gallery.gif)
 
@@ -88,22 +90,26 @@ Godot demo capture and preview-tool output:
 
 | Parameter | Values | Meaning |
 |---|---|---|
-| shape | fan / circle / ring / rect / ray | hit area |
+| shape | fan / circle / ring / rect / ray (**defaults**) or **custom** | hit area. Custom: tile mask, polygon, and/or union of default shapes (e.g. a 2x2 square `["##","##"]`, or a plus `[".#.","###",".@."]`). |
 | radius, inner_radius, angle | px, px, deg | fan / circle / ring size |
 | length, width | px | rect / ray size |
+| tile_mask, tile_size, tile_anchor, custom_polygon, custom_union | — | custom shape data (same data is the hitbox) |
 | anchor | caster / target | from the enemy, or dropped at the target's feet (snapped once) |
 | direction | deg or null | fixed facing, or face the target |
 | duration | s | warning start -> hit |
 | track_time | s | follow the target, then lock |
 | style | standard / quick / aim / countdown / themed | how the warning is drawn |
 | fill_mode | outward_from_caster / outward_from_shape_center / none | fill direction (auto by style) |
-| color_role | damage / control / custom | colour meaning |
+| category | damage / control / mixed / support | gameplay kind; picks the default colour when color_role is auto |
+| color_role | auto / damage / control / custom | auto follows category. Defaults: red = damage, blue = control (reserved, unused by the example), purple = mixed, teal = support. Override per category or per skill. |
 
 Full reference: [references/parameters.md](references/parameters.md).
 
 ## Design principles
 
+- The 5 built-in shapes are defaults; custom tile masks, polygons and unions are supported.
 - The warning **is** the hitbox (same pixel set, checked once on the hit frame).
+- Colours follow the attack category (red = damage; blue = control is reserved and unused by the wooden-dummy example). You can override them.
 - Show where immediately (outline), show when with fill progress, flash near the end.
 - Not colour-only: dark outer + light inner outline on any floor.
 - Fast attacks narrow, slow attacks wide; heavy attacks leave a recovery window.

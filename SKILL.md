@@ -46,31 +46,62 @@ in `examples/attacks_input_example.json`):
 | Self-centred burst | circle | standard (outward from caster) | 0.8-1.2 s |
 | Donut (safe inside) | ring | countdown (inner -> outer) | 1.0-1.5 s |
 | Beam / long line | rect | standard | 0.8-1.2 s |
+| Cross, L-shape, multi-tile, hand-drawn area | **custom** (the 5 shapes above are only defaults) | standard or countdown | 0.8-1.2 s |
+
+The 5 built-in shapes (fan, circle, ring, rect, ray) are **defaults**, not a closed list. If an
+attack does not fit them, recommend a custom shape (see question 1 below).
 
 Balance rule of thumb: **fast attacks are narrow, slow attacks are wide** (never fast + wide).
 Present the recommendation as a short table and explain each choice in one line.
 
 ### 3. Ask for customization
 Ask these in ONE message, each with the recommended default so the user can just say "ok":
-1. Reach / size per attack, in tiles (radius, length x width, square size).
-2. Fan angles (e.g. light 60 deg, heavy 120 deg).
-3. Warning time per attack (seconds) and recovery after heavy attacks.
-4. Fill mode: from the caster, from the shape centre, or none.
-5. Tracking: lock at start, or follow the player for N s then lock (aim lines).
-6. Anchor: in front of the enemy, or at the player's feet.
-7. Colours / roles: red = damage (default); other roles (e.g. blue = knockback/control)?
-8. Rhythm: random gap range between attacks (default 1.0-3.0 s, tiers 25/50/25),
-   no same attack twice in a row?
-9. Attack budget: how many attacks may be active at once across all enemies (default 2-3)?
-10. Optional rules: max one projectile at a time, staggered starts, no overlapping drops
+1. **Shape: use one of the 5 default shapes (fan, circle, ring, rect, ray), or define a custom shape?**
+   The 5 built-in shapes are only defaults. To describe a custom shape, pick one of:
+   (a) **Tile mask** — a grid of characters in 16 px tiles, with an origin / anchor cell.
+       `#` = filled, `.` or space = empty, `@` or `o` = filled cell whose centre is the origin.
+       If there is no `@`, the origin defaults to the centre of the mask (or set `tile_anchor`
+       in tile units from the mask's top-left; the centre of a 2x2 is `[1, 1]`).
+       Example 2x2 square centred on the player: `["##", "##"]` with anchor `target`.
+       Example plus / cross: `[".#.", "###", ".@."]`.
+   (b) **Polygon** — vertices in pixels, relative to the caster or the target.
+   (c) **Combination** — a union of default shapes (e.g. two rects making a cross, or a fan plus a circle).
+   Also confirm: **anchor** (caster / the player's position at the moment of cast / a locked point)
+   and **rotation** (faces the target, or a fixed angle; target-anchored custom shapes stay
+   axis-aligned unless a direction is set).
+   The same shape data must still drive both the warning drawing and the hitbox
+   (warning == hitbox).
+   Styles: all 5 work with custom shapes. Standard / themed fill grows outward from the caster
+   (that is the fill origin). Countdown fills from the shape's centre / anchor. Quick flash
+   only draws the outline. Aim line is meant for a long thin ray / rect and is usually a
+   poor fit for a blob or tile-mask.
+2. Reach / size per attack, in tiles (radius, length x width, square size, or mask size).
+3. Fan angles (e.g. light 60 deg, heavy 120 deg), if using fans.
+4. Warning time per attack (seconds) and recovery after heavy attacks.
+5. Fill mode: from the caster, from the shape centre, or none.
+6. Tracking: lock at start, or follow the player for N s then lock (aim lines).
+7. Anchor: in front of the enemy, or at the player's feet.
+8. **Skill category:** is each attack **DAMAGE**, **CONTROL** (knockback, slow, stun, root, pull),
+   or **MIXED** (damage + control)? Optional: **SUPPORT** / other.
+9. **Colours are customisable.** Defaults: red = damage; blue = control (a reserved interface
+   colour, optional and unused by default — the wooden-dummy example only uses red);
+   MIXED can use purple, or red fill + blue edge. Users may override any colour per category
+   or per skill (e.g. to match a monster theme), but keep the mapping consistent within a
+   game and readable against the background (dark outer + light inner outline, Bayer dither,
+   never colour-only).
+10. Rhythm: random gap range between attacks (default 1.0-3.0 s, tiers 25/50/25),
+    no same attack twice in a row?
+11. Attack budget: how many attacks may be active at once across all enemies (default 2-3)?
+12. Optional rules: max one projectile at a time, staggered starts, no overlapping drops
     (default: off - only add them if the user wants them).
 Explain trade-offs briefly when relevant (e.g. tracking makes dodging harder; a 0.5 s
 minimum gap with budget 3 is much harder than a fixed 2.5 s gap).
 
 ### 4. Write the spec, then implement
-1. Write a spec table (attack, shape, size px/tiles, anchor, warning, style, tracking,
-   recovery, damage, budget cost) into the project docs, and a JSON file in the format of
-   `examples/wooden_dummy.json` (same keys as `tools/telegraph_lib.py` DEFAULTS).
+1. Write a spec table (attack, shape — including custom mask/polygon/union if used — size
+   px/tiles, anchor, warning, style, tracking, category, colour, recovery, damage, budget
+   cost) into the project docs, and a JSON file in the format of `examples/wooden_dummy.json`
+   (same keys as `tools/telegraph_lib.py` DEFAULTS).
 2. Copy `godot/addons/pixel_telegraph/` into the project (`res://addons/pixel_telegraph/`).
    Create one `.tres` per attack (see `godot/examples/*.tres`) or load the JSON with
    `PixelTelegraphSpec.load_json(path)`.

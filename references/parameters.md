@@ -6,19 +6,32 @@ Units: pixels and seconds. 1 tile = 16 px by default. Animation is quantised to 
 
 ## Shape
 
+The five built-in shapes (fan, circle, ring, rect, ray) are **defaults**. A sixth value,
+`custom`, lets you define any area: a tile mask, a polygon, a union of default shapes, or any
+combination of those. The same data still drives both the warning drawing and the hitbox.
+
 | JSON (`telegraph.*`) | Godot | Values | Notes |
 |---|---|---|---|
-| `shape` | `shape` | `fan` FAN, `circle` CIRCLE, `ring` RING, `rect` RECT, `ray` RAY | ray = thin rect, usually 3 px wide |
+| `shape` | `shape` | `fan` FAN, `circle` CIRCLE, `ring` RING, `rect` RECT, `ray` RAY, `custom` CUSTOM | ray = thin rect, usually 3 px wide. custom: see the rows below |
 | `radius` | `radius_px` | px | fan / circle / ring outer radius, from the origin pixel centre |
 | `inner_radius` | `inner_radius_px` | px | ring only; pixels at distance <= inner radius are safe |
 | `angle` | `angle_deg` | degrees | fan full opening angle |
 | `length` | `length_px` | px | rect / ray length along the facing |
 | `width` | `width_px` | px | rect / ray width across the facing |
-| `anchor` | `anchor` | `caster` CASTER, `target` TARGET | target: centred on the target's position (rounded) at warning start, never moves |
-| `direction` | `use_fixed_direction` + `fixed_direction_deg` | degrees or null | null = face the target. 0 = right, 90 = down. Target-anchored circle/ring/rect use 0 |
+| `anchor` | `anchor` | `caster` CASTER, `target` TARGET | target: centred on the target's position (rounded) at warning start, never moves. A "locked point" is just target (or a position you pass in). |
+| `direction` | `use_fixed_direction` + `fixed_direction_deg` | degrees or null | null = face the target. 0 = right, 90 = down. Target-anchored circle/ring/rect/custom use 0 |
+| `tile_mask` | `tile_mask` | array of strings | custom. `#` = filled, `.` / space = empty, `@` / `o` = filled origin cell (its centre). Example 2x2: `["##","##"]`. Example plus: `[".#.","###",".@."]` |
+| `tile_size` | `tile_size` | px, default 16 | custom tile size |
+| `tile_anchor` | `tile_anchor` | `[x, y]` tile units | origin from the mask's top-left corner. Omitted / `(-1,-1)` = mask centre, or the `@` cell if present. Centre of a 2x2 is `[1, 1]` |
+| `custom_polygon` | `custom_polygon` | `[[x,y], ...]` px | vertices relative to the origin, rotated by facing. A pixel is inside if its centre is inside or on the boundary |
+| `custom_union` | `custom_union` | array of dicts | union of default (or nested custom) shapes. Each part may have `offset` `[x,y]` px and `direction` (deg, added to the parent facing), plus the usual size keys and `anchor` |
 
 Pixels are tested at their centres (x + 0.5, y + 0.5), so a shape is a deterministic set of
 integer pixels. Facing is quantised to whole degrees.
+
+Custom-shape styles: standard / themed fill grows outward from the caster (the fill origin);
+countdown fills from the shape's centre / anchor; quick flash is outline only; aim line is
+meant for a long thin ray / rect, not a blob or tile-mask.
 
 ## Timing
 
@@ -36,10 +49,18 @@ integer pixels. Facing is quantised to whole degrees.
 |---|---|---|
 | `style` | `style` | `standard` STANDARD, `quick` QUICK_FLASH, `aim` AIM_LINE, `countdown` COUNTDOWN, `themed` THEMED |
 | `fill_mode` | `fill_mode` | null/AUTO, `outward_from_caster`, `outward_from_shape_center`, `none` |
-| `color_role` | `color_role` | `damage` (red, default), `control` (blue); Godot also CUSTOM + `custom_colors` [edge, main, highlight, flash, white] |
+| `category` | `category` | `damage` DAMAGE, `control` CONTROL, `mixed` MIXED, `support` SUPPORT | gameplay kind of the attack. When `color_role` is `auto` (the default), this picks the palette |
+| `color_role` | `color_role` | `auto` AUTO (default, follow category), `damage` DAMAGE (red), `control` CONTROL (blue), `custom` CUSTOM + `custom_colors` [edge, main, highlight, flash, white] | explicit damage/control/custom overrides the category colour |
 | `overlay` | `overlay` | `"cracks"` -> `PixelTelegraphCrackOverlay`; write your own by extending `PixelTelegraphOverlay` |
 
 AUTO fill: standard/themed -> from caster; countdown -> from shape centre; quick/aim -> none.
+
+**Colours.** Defaults: red = damage; blue = control (a reserved interface colour, optional and
+unused by default — the wooden-dummy example only uses red); purple = mixed; teal = support.
+MIXED can also be styled as red fill + blue edge via `custom_colors`. You may override any
+colour per category or per skill (e.g. to match a monster theme), but keep the mapping
+consistent within a game and readable against the background (dark outer + light inner
+outline, Bayer dither, never colour-only).
 
 | Style | Drawing | Use for |
 |---|---|---|
