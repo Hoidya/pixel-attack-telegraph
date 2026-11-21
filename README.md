@@ -24,6 +24,7 @@ hit where they were warned.
 | `references/` | design guide with sources, full parameter reference, cadence & attack-budget guide |
 | `examples/` | worked example: a wooden training dummy with 4 attacks (JSON + GIFs) |
 | `assets/ninja-adventure/` | three tiny CC0 images used by the preview tool |
+| `skills/vfx-research-workflow/` | companion skill: research published VFX cases, then redraw attack effects (slash / flame stomp / slime slam examples) |
 
 ## Install
 
@@ -117,6 +118,15 @@ Full reference: [references/parameters.md](references/parameters.md).
 
 See [references/design-guide.md](references/design-guide.md) and
 [references/cadence-and-budget.md](references/cadence-and-budget.md).
+
+
+## Companion skill: research cases, then draw the attack
+
+When a warning is already fair but the **hit effect** looks timid or only technically correct, use the companion skill in [`skills/vfx-research-workflow/`](skills/vfx-research-workflow/SKILL.md).
+
+The loop is: restate the general drawing rules, collect 8–12 **cited** cases for that move type, write a timeline scheme and wait for approval, then render with an independent script (keeping older previews) and self-check keyframes against the cases.
+
+Worked example GIFs (iaido slash, flame stomp, slime slam) live in [`skills/vfx-research-workflow/examples/`](skills/vfx-research-workflow/examples/).
 
 ## License
 

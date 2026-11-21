@@ -22,6 +22,7 @@
 | `references/` | 设计指南（附来源）、参数说明、出招节奏与攻击名额指南（英文） |
 | `examples/` | 完整示例：木头人的 4 招（参数 JSON + GIF） |
 | `assets/ninja-adventure/` | 预览工具用的 3 张 CC0 小图 |
+| `skills/vfx-research-workflow/` | 配套技能：先研究已发表的特效案例，再重画出手动画（拔刀斩 / 烈焰践踏 / 黏液拍击示例） |
 
 ## 安装
 
@@ -89,6 +90,15 @@ python tools/render_preview.py my_spec.json -o previews/
 - 不只靠颜色：深色外描边加浅色内描边，在什么地面上都看得清。
 - 快招窄、慢招宽；重招之后留出反击窗口。
 - 出招间隔可控地随机，从收招结束后才开始算，再加上全场共用的攻击名额。
+
+
+## 配套技能：先研究案例，再画出手特效
+
+预警已经公平、但**命中特效**看起来胆小或只是技术上正确时，用 [`skills/vfx-research-workflow/`](skills/vfx-research-workflow/SKILL.md) 这套配套流程。
+
+步骤是：先写通用画法规则，再为这一类招式搜集 8–12 个**可核对出处**的案例，写好按时间轴分段的方案并等确认，然后用独立脚本渲图（保留旧版），最后对照案例抽关键帧自查。
+
+示例 GIF（拔刀斩、烈焰践踏、黏液拍击）在 [`skills/vfx-research-workflow/examples/`](skills/vfx-research-workflow/examples/)。
 
 ## 许可
 
